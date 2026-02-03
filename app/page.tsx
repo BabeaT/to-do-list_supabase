@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
   Circle,
@@ -27,7 +29,24 @@ export default function TodoList() {
   const [newTodo, setNewTodo] = useState('');
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createClient();
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+      if (data.user) {
+        setUserId(data.user.id);
+      } else {
+        const mockUserId = 'mock-user-id';
+        setUserId(mockUserId);
+      }
+    };
+    getUser();
+  }, []);
 
   const loadTodos = useCallback((uid: string) => {
     setLoading(true);
@@ -52,10 +71,17 @@ export default function TodoList() {
   }, []);
 
   useEffect(() => {
-    const mockUserId = 'mock-user-id';
-    setUserId(mockUserId);
-    loadTodos(mockUserId);
-  }, [loadTodos]);
+    if (userId) {
+      loadTodos(userId);
+    }
+  }, [loadTodos, userId]);
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserId('mock-user-id');
+  };
 
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +127,19 @@ export default function TodoList() {
       </div>
 
       <div className="relative min-h-screen flex items-center justify-center p-4">
+        {user && (
+          <div className={`absolute top-8 left-8 flex items-center gap-4 z-10 ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            <span className="text-sm font-medium">{user.email}</span>
+            <Button 
+              onClick={handleLogout} 
+              variant="outline" 
+              size="sm"
+              className={isDark ? 'bg-white/10 text-white hover:bg-white/20 border-white/20' : ''}
+            >
+              退出登录
+            </Button>
+          </div>
+        )}
         <div className="w-full max-w-2xl">
           <button
             onClick={() => setIsDark(!isDark)}
@@ -138,6 +177,7 @@ export default function TodoList() {
                 ? '开启高效的一天！'
                 : `已完成 ${completedCount} / ${totalCount}`}
             </p>
+            {!user && (
             <div className="flex flex-wrap gap-3 mb-8">
               <Button
                 asChild
@@ -160,6 +200,7 @@ export default function TodoList() {
                 <Link href="/auth/sign-up">注册</Link>
               </Button>
             </div>
+            )}
 
             <form onSubmit={addTodo} className="mb-8">
               <div className="flex gap-3">
