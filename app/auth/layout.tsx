@@ -40,31 +40,38 @@ export default function AuthLayout({
 
         <div className="relative min-h-screen flex flex-col">
           <header className="w-full max-w-5xl mx-auto p-6 flex items-center justify-between">
-            <Link
-              href="/"
-              className={`flex items-center gap-2 text-sm font-medium ${
-                isDark
-                  ? "text-white/80 hover:text-white"
-                  : "text-slate-700 hover:text-slate-900"
-              } transition-colors`}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              返回首页
-            </Link>
-            <button
-              onClick={() => setIsDark(!isDark)}
-              className={`p-3 rounded-full ${
-                isDark
-                  ? "bg-white/10 text-white hover:bg-white/20"
-                  : "bg-slate-800/10 text-slate-800 hover:bg-slate-800/20"
-              } backdrop-blur-lg transition-all duration-300`}
-            >
-              {isDark ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </button>
+            {/* Left side: Back to Home */}
+            <div className="absolute top-8 left-8 z-10">
+              <Link
+                href="/"
+                className={`flex items-center gap-2 text-sm font-medium ${
+                  isDark
+                    ? "text-white/80 hover:text-white"
+                    : "text-slate-700 hover:text-slate-900"
+                } transition-colors`}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回首页
+              </Link>
+            </div>
+
+            {/* Right side: Theme Switcher */}
+            <div className="absolute top-8 right-8 z-10">
+              <button
+                onClick={() => setIsDark(!isDark)}
+                className={`p-3 rounded-full ${
+                  isDark
+                    ? "bg-white/10 text-white hover:bg-white/20"
+                    : "bg-slate-800/10 text-slate-800 hover:bg-slate-800/20"
+                } backdrop-blur-lg transition-all duration-300`}
+              >
+                {isDark ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </header>
 
           <main className="flex-1 flex items-center justify-center p-6 md:p-10">

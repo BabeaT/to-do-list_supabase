@@ -41,8 +41,7 @@ export default function TodoList() {
       if (data.user) {
         setUserId(data.user.id);
       } else {
-        const mockUserId = 'mock-user-id';
-        setUserId(mockUserId);
+        setUserId(null);
       }
     };
     getUser();
@@ -73,6 +72,9 @@ export default function TodoList() {
   useEffect(() => {
     if (userId) {
       loadTodos(userId);
+    } else {
+      setTodos([]);
+      setLoading(false);
     }
   }, [loadTodos, userId]);
 
@@ -80,12 +82,16 @@ export default function TodoList() {
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
-    setUserId('mock-user-id');
+    setUserId(null);
   };
 
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTodo.trim() || !userId) return;
+    if (!userId) {
+      router.push('/auth/login');
+      return;
+    }
+    if (!newTodo.trim()) return;
 
     const newTodoItem: Todo = {
       id: Math.random().toString(36).substring(7),
@@ -127,19 +133,45 @@ export default function TodoList() {
       </div>
 
       <div className="relative min-h-screen flex items-center justify-center p-4">
-        {user && (
-          <div className={`absolute top-8 left-8 flex items-center gap-4 z-10 ${isDark ? 'text-white' : 'text-slate-800'}`}>
-            <span className="text-sm font-medium">{user.email}</span>
-            <Button 
-              onClick={handleLogout} 
-              variant="outline" 
-              size="sm"
-              className={isDark ? 'bg-white/10 text-white hover:bg-white/20 border-white/20' : ''}
-            >
-              退出登录
-            </Button>
-          </div>
-        )}
+        <div className={`absolute top-8 left-8 flex items-center gap-4 z-10 ${isDark ? 'text-white' : 'text-slate-800'}`}>
+          {user ? (
+            <>
+              <span className="text-sm font-medium">{user.email}</span>
+              <Button 
+                onClick={handleLogout} 
+                variant="outline" 
+                size="sm"
+                className={isDark ? 'bg-white/10 text-white hover:bg-white/20 border-white/20' : ''}
+              >
+                退出登录
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Button
+                asChild
+                className={`${
+                  isDark
+                    ? 'bg-white/10 text-white hover:bg-white/20 border-white/20'
+                    : 'bg-white/60 text-slate-900 hover:bg-white/80 border-slate-200'
+                } backdrop-blur-md border transition-all duration-300`}
+              >
+                <Link href="/auth/login">登录</Link>
+              </Button>
+              <Button
+                asChild
+                className={`${
+                  isDark
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
+                    : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                } text-white shadow-lg hover:shadow-xl transition-all duration-300`}
+              >
+                <Link href="/auth/sign-up">注册</Link>
+              </Button>
+            </div>
+          )}
+        </div>
+        
         <div className="w-full max-w-2xl">
           <button
             onClick={() => setIsDark(!isDark)}
@@ -177,30 +209,6 @@ export default function TodoList() {
                 ? '开启高效的一天！'
                 : `已完成 ${completedCount} / ${totalCount}`}
             </p>
-            {!user && (
-            <div className="flex flex-wrap gap-3 mb-8">
-              <Button
-                asChild
-                className={`h-11 px-6 ${
-                  isDark
-                    ? 'bg-white/10 text-white hover:bg-white/20'
-                    : 'bg-white/80 text-slate-900 hover:bg-white'
-                } rounded-2xl transition-all duration-300`}
-              >
-                <Link href="/auth/login">登录</Link>
-              </Button>
-              <Button
-                asChild
-                className={`h-11 px-6 ${
-                  isDark
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
-                    : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300`}
-              >
-                <Link href="/auth/sign-up">注册</Link>
-              </Button>
-            </div>
-            )}
 
             <form onSubmit={addTodo} className="mb-8">
               <div className="flex gap-3">
@@ -236,7 +244,7 @@ export default function TodoList() {
               <div className="text-center py-16">
                 <Circle className={`w-16 h-16 mx-auto mb-4 ${isDark ? 'text-white/20' : 'text-slate-300'}`} />
                 <p className={`text-lg ${isDark ? 'text-white/40' : 'text-slate-400'}`}>
-                  还没有任务，先添加一个吧！
+                  {user ? '还没有任务，先添加一个吧！' : '登录后制定Todo'}
                 </p>
               </div>
             ) : (
