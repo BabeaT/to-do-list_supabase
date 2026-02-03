@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import {
@@ -11,6 +11,8 @@ import {
   Sparkles,
   Moon,
   Sun,
+  Image as ImageIcon,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -21,6 +23,7 @@ type Todo = {
   user_id: string;
   title: string;
   completed: boolean;
+  image_url?: string;
   created_at: string;
 };
 
@@ -31,6 +34,13 @@ export default function TodoList() {
   const [userId, setUserId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [isDark, setIsDark] = useState(true);
+  
+  // 图片上传相关状态
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const router = useRouter();
 
   useEffect(() => {
@@ -81,15 +91,65 @@ export default function TodoList() {
     setTodos([]); // 清空 todos
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert('文件大小不能超过 5MB');
+        return;
+      }
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
       router.push('/auth/login');
       return;
     }
-    if (!newTodo.trim()) return;
+    if (!newTodo.trim() && !selectedFile) return;
 
     const supabase = createClient();
+    let imageUrl = null;
+
+    if (selectedFile) {
+      setUploading(true);
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('my todo')
+        .upload(filePath, selectedFile);
+
+      if (uploadError) {
+        console.error('Error uploading image:', uploadError);
+        alert('图片上传失败: ' + uploadError.message);
+        setUploading(false);
+        return;
+      }
+
+      const { data } = supabase.storage
+        .from('my todo')
+        .getPublicUrl(filePath);
+        
+      imageUrl = data.publicUrl;
+      setUploading(false);
+    }
     
     // 乐观更新 UI (可选，这里先不乐观更新添加操作，等待服务器返回以获取真实 ID)
     // 如果需要极速体验可以生成临时 ID，但这里为了简单直接等待返回
@@ -99,6 +159,7 @@ export default function TodoList() {
       .insert([
         { 
           title: newTodo,
+          image_url: imageUrl
           // user_id 会由数据库默认值 auth.uid() 自动填充，且受 RLS 保护
         }
       ])
@@ -111,6 +172,7 @@ export default function TodoList() {
     } else if (data) {
       setTodos([data, ...todos]);
       setNewTodo('');
+      clearFile();
     }
   };
 
@@ -250,28 +312,65 @@ export default function TodoList() {
             </p>
 
             <form onSubmit={addTodo} className="mb-8">
-              <div className="flex gap-3">
-                <Input
-                  type="text"
-                  placeholder="添加新任务..."
-                  value={newTodo}
-                  onChange={(e) => setNewTodo(e.target.value)}
-                  className={`flex-1 h-14 px-6 text-lg ${
-                    isDark
-                      ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-cyan-400'
-                      : 'bg-white/80 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-500'
-                  } backdrop-blur-xl rounded-2xl transition-all duration-300`}
-                />
-                <Button
-                  type="submit"
-                  className={`h-14 px-8 ${
-                    isDark
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
-                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                  } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
-                >
-                  <Plus className="w-5 h-5" />
-                </Button>
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <Input
+                    type="text"
+                    placeholder="添加新任务..."
+                    value={newTodo}
+                    onChange={(e) => setNewTodo(e.target.value)}
+                    className={`flex-1 h-14 px-6 text-lg ${
+                      isDark
+                        ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-cyan-400'
+                        : 'bg-white/80 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-500'
+                    } backdrop-blur-xl rounded-2xl transition-all duration-300`}
+                  />
+                  
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  
+                  <Button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`h-14 w-14 p-0 ${
+                      isDark
+                        ? 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                        : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-200'
+                    } rounded-2xl transition-all duration-300`}
+                  >
+                    <ImageIcon className="w-6 h-6" />
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    disabled={uploading}
+                    className={`h-14 px-8 ${
+                      isDark
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
+                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                    } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
+                  >
+                    {uploading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-5 h-5" />}
+                  </Button>
+                </div>
+                
+                {previewUrl && (
+                  <div className="relative inline-block self-start">
+                    <img src={previewUrl} alt="Preview" className="h-20 w-auto rounded-lg border border-white/20" />
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
 
@@ -298,10 +397,10 @@ export default function TodoList() {
                         : 'bg-white/50 hover:bg-white/80 border-white/40'
                     } backdrop-blur-xl rounded-2xl border p-5 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4`}
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-start gap-4">
                       <button
                         onClick={() => toggleTodo(todo.id, todo.completed)}
-                        className="flex-shrink-0 transition-transform duration-300 hover:scale-110"
+                        className="flex-shrink-0 mt-1 transition-transform duration-300 hover:scale-110"
                       >
                         {todo.completed ? (
                           <CheckCircle2 className={`w-7 h-7 ${isDark ? 'text-cyan-400' : 'text-blue-600'}`} />
@@ -310,19 +409,29 @@ export default function TodoList() {
                         )}
                       </button>
 
-                      <span
-                        className={`flex-1 text-lg transition-all duration-300 ${
-                          todo.completed
-                            ? `line-through ${isDark ? 'text-white/40' : 'text-slate-400'}`
-                            : isDark ? 'text-white' : 'text-slate-800'
-                        }`}
-                      >
-                        {todo.title}
-                      </span>
+                      <div className="flex-1 flex flex-col gap-2">
+                        <span
+                          className={`text-lg transition-all duration-300 ${
+                            todo.completed
+                              ? `line-through ${isDark ? 'text-white/40' : 'text-slate-400'}`
+                              : isDark ? 'text-white' : 'text-slate-800'
+                          }`}
+                        >
+                          {todo.title}
+                        </span>
+                        {todo.image_url && (
+                          <img 
+                            src={todo.image_url} 
+                            alt="Attachment" 
+                            className="max-h-40 w-auto rounded-lg border border-white/10 self-start object-contain bg-black/20"
+                            loading="lazy"
+                          />
+                        )}
+                      </div>
 
                       <button
                         onClick={() => deleteTodo(todo.id)}
-                        className={`flex-shrink-0 p-2 ${
+                        className={`flex-shrink-0 p-2 mt-1 ${
                           isDark
                             ? 'text-white/40 hover:text-red-400 hover:bg-red-400/10'
                             : 'text-slate-400 hover:text-red-600 hover:bg-red-100'

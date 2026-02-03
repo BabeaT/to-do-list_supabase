@@ -4,6 +4,7 @@ create table public.todos (
   user_id uuid not null default auth.uid(),   -- 自动关联当前登录用户
   title text not null,                        -- 任务标题
   completed boolean not null default false,   -- 是否完成，默认为未完成
+  image_url text,                             -- 附件图片地址
   created_at timestamp with time zone not null default now(), -- 创建时间
   
   -- 主键约束
