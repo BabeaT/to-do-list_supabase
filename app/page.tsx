@@ -77,6 +77,34 @@ export default function TodoList() {
   useEffect(() => {
     if (userId) {
       loadTodos();
+
+      // 订阅实时更新
+      const supabase = createClient();
+      const channel = supabase
+        .channel('realtime todos')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'todos',
+          filter: `user_id=eq.${userId}`,
+        }, (payload) => {
+          console.log('Realtime update:', payload);
+          if (payload.eventType === 'INSERT') {
+            setTodos((prev) => {
+              if (prev.find(t => t.id === payload.new.id)) return prev;
+              return [payload.new as Todo, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setTodos((prev) => prev.map(t => t.id === payload.new.id ? { ...t, ...payload.new } as Todo : t));
+          } else if (payload.eventType === 'DELETE') {
+            setTodos((prev) => prev.filter(t => t.id !== payload.old.id));
+          }
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } else {
       setTodos([]);
       setLoading(false);
