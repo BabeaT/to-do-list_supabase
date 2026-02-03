@@ -47,31 +47,26 @@ export default function TodoList() {
     getUser();
   }, []);
 
-  const loadTodos = useCallback((uid: string) => {
+  const loadTodos = useCallback(async () => {
     setLoading(true);
-    const mockTodos: Todo[] = [
-      {
-        id: '1',
-        user_id: uid,
-        title: '欢迎使用你的清单！',
-        completed: false,
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        user_id: uid,
-        title: '试着添加一个新任务',
-        completed: true,
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-      },
-    ];
-    setTodos(mockTodos);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('todos')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading todos:', error);
+      // 可以添加一个 toast 通知
+    } else {
+      setTodos(data || []);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (userId) {
-      loadTodos(userId);
+      loadTodos();
     } else {
       setTodos([]);
       setLoading(false);
@@ -83,6 +78,7 @@ export default function TodoList() {
     await supabase.auth.signOut();
     setUser(null);
     setUserId(null);
+    setTodos([]); // 清空 todos
   };
 
   const addTodo = async (e: React.FormEvent) => {
@@ -93,26 +89,69 @@ export default function TodoList() {
     }
     if (!newTodo.trim()) return;
 
-    const newTodoItem: Todo = {
-      id: Math.random().toString(36).substring(7),
-      user_id: userId,
-      title: newTodo,
-      completed: false,
-      created_at: new Date().toISOString(),
-    };
+    const supabase = createClient();
+    
+    // 乐观更新 UI (可选，这里先不乐观更新添加操作，等待服务器返回以获取真实 ID)
+    // 如果需要极速体验可以生成临时 ID，但这里为了简单直接等待返回
+    
+    const { data, error } = await supabase
+      .from('todos')
+      .insert([
+        { 
+          title: newTodo,
+          // user_id 会由数据库默认值 auth.uid() 自动填充，且受 RLS 保护
+        }
+      ])
+      .select()
+      .single();
 
-    setTodos([newTodoItem, ...todos]);
-    setNewTodo('');
+    if (error) {
+      console.error('Error adding todo:', error);
+      alert('添加任务失败: ' + error.message);
+    } else if (data) {
+      setTodos([data, ...todos]);
+      setNewTodo('');
+    }
   };
 
   const toggleTodo = async (id: string, completed: boolean) => {
+    // 乐观更新
+    const originalTodos = [...todos];
+    const newCompleted = !completed;
+    
     setTodos(todos.map(todo =>
-      todo.id === id ? { ...todo, completed: !completed } : todo
+      todo.id === id ? { ...todo, completed: newCompleted } : todo
     ));
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('todos')
+      .update({ completed: newCompleted })
+      .eq('id', id);
+      
+    if (error) {
+      console.error('Error toggling todo:', error);
+      setTodos(originalTodos); // 回滚
+      alert('更新状态失败: ' + error.message);
+    }
   };
 
   const deleteTodo = async (id: string) => {
+    // 乐观更新
+    const originalTodos = [...todos];
     setTodos(todos.filter(todo => todo.id !== id));
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting todo:', error);
+      setTodos(originalTodos); // 回滚
+      alert('删除任务失败: ' + error.message);
+    }
   };
 
   const completedCount = todos.filter(t => t.completed).length;
