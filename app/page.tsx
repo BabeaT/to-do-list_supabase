@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 type Todo = {
   id: string;
@@ -38,7 +39,7 @@ export default function TodoList() {
   // 图片上传相关状态
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const router = useRouter();
@@ -151,56 +152,66 @@ export default function TodoList() {
     }
     if (!newTodo.trim() && !selectedFile) return;
 
+    setIsSubmitting(true);
     const supabase = createClient();
     let imageUrl = null;
 
-    if (selectedFile) {
-      setUploading(true);
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${userId}/${fileName}`;
+    try {
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${userId}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('my todo')
-        .upload(filePath, selectedFile);
+        const { error: uploadError } = await supabase.storage
+          .from('my todo')
+          .upload(filePath, selectedFile);
 
-      if (uploadError) {
-        console.error('Error uploading image:', uploadError);
-        alert('图片上传失败: ' + uploadError.message);
-        setUploading(false);
-        return;
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          alert('图片上传失败: ' + uploadError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const { data } = supabase.storage
+          .from('my todo')
+          .getPublicUrl(filePath);
+          
+        imageUrl = data.publicUrl;
+      }
+      
+      // 调用后端 API 解析待办事项
+      const response = await fetch('/api/generate-todos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: newTodo,
+          userId: userId,
+          imageUrl: imageUrl,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate todos');
       }
 
-      const { data } = supabase.storage
-        .from('my todo')
-        .getPublicUrl(filePath);
-        
-      imageUrl = data.publicUrl;
-      setUploading(false);
-    }
-    
-    // 乐观更新 UI (可选，这里先不乐观更新添加操作，等待服务器返回以获取真实 ID)
-    // 如果需要极速体验可以生成临时 ID，但这里为了简单直接等待返回
-    
-    const { data, error } = await supabase
-      .from('todos')
-      .insert([
-        { 
-          title: newTodo,
-          image_url: imageUrl
-          // user_id 会由数据库默认值 auth.uid() 自动填充，且受 RLS 保护
-        }
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding todo:', error);
-      alert('添加任务失败: ' + error.message);
-    } else if (data) {
-      setTodos([data, ...todos]);
+      // 成功后清空输入
       setNewTodo('');
       clearFile();
+      // 这里不需要手动更新 todos，因为有 realtime 订阅，
+      // 或者为了更快的反馈，我们可以重新 fetch 一次，但 realtime 应该够快。
+      // 为了保险，可以手动 loadTodos 一次。
+      // loadTodos(); // 不需要，realtime 会处理
+      
+    } catch (error: any) {
+      console.error('Error adding todo:', error);
+      alert('添加任务失败: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -341,50 +352,52 @@ export default function TodoList() {
 
             <form onSubmit={addTodo} className="mb-8">
               <div className="flex flex-col gap-3">
-                <div className="flex gap-3">
-                  <Input
-                    type="text"
-                    placeholder="添加新任务..."
+                <div className="flex gap-3 items-start">
+                  <Textarea
+                    placeholder="添加新任务... (支持自然语言，例如：明天早上买牛奶，下午去健身)"
                     value={newTodo}
                     onChange={(e) => setNewTodo(e.target.value)}
-                    className={`flex-1 h-14 px-6 text-lg ${
+                    rows={3}
+                    className={`flex-1 text-lg ${
                       isDark
                         ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-cyan-400'
                         : 'bg-white/80 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-500'
-                    } backdrop-blur-xl rounded-2xl transition-all duration-300`}
+                    } backdrop-blur-xl rounded-2xl transition-all duration-300 resize-none`}
                   />
                   
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    accept="image/*"
-                    className="hidden"
-                  />
-                  
-                  <Button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`h-14 w-14 p-0 ${
-                      isDark
-                        ? 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
-                        : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-200'
-                    } rounded-2xl transition-all duration-300`}
-                  >
-                    <ImageIcon className="w-6 h-6" />
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    
+                    <Button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`h-14 w-14 p-0 ${
+                        isDark
+                          ? 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
+                          : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-200'
+                      } rounded-2xl transition-all duration-300`}
+                    >
+                      <ImageIcon className="w-6 h-6" />
+                    </Button>
 
-                  <Button
-                    type="submit"
-                    disabled={uploading}
-                    className={`h-14 px-8 ${
-                      isDark
-                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
-                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                    } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
-                  >
-                    {uploading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-5 h-5" />}
-                  </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className={`h-14 w-14 p-0 ${
+                        isDark
+                          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
+                          : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
+                      } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
+                    >
+                      {isSubmitting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-6 h-6" />}
+                    </Button>
+                  </div>
                 </div>
                 
                 {previewUrl && (
