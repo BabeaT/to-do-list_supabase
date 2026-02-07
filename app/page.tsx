@@ -13,6 +13,7 @@ import {
   Sun,
   Image as ImageIcon,
   X,
+  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,8 @@ export default function TodoList() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [progressPercentage, setProgressPercentage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const router = useRouter();
@@ -144,6 +147,15 @@ export default function TodoList() {
     }
   };
 
+  const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
@@ -153,18 +165,28 @@ export default function TodoList() {
     if (!newTodo.trim() && !selectedFile) return;
 
     setIsSubmitting(true);
+    setProgressMessage('正在处理请求...');
+    setProgressPercentage(10); // 初始进度
     const supabase = createClient();
     let imageUrl = null;
+    let base64Image = null;
 
     try {
       if (selectedFile) {
+        setProgressMessage('正在上传图片...');
+        setProgressPercentage(30); // 开始上传
         const fileExt = selectedFile.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `${userId}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('my todo')
-          .upload(filePath, selectedFile);
+        // 并行执行：上传到 Supabase 和 转换为 Base64
+        const [uploadResult, base64Result] = await Promise.all([
+          supabase.storage.from('my todo').upload(filePath, selectedFile),
+          convertToBase64(selectedFile)
+        ]);
+
+        const { error: uploadError } = uploadResult;
+        base64Image = base64Result;
 
         if (uploadError) {
           console.error('Error uploading image:', uploadError);
@@ -178,8 +200,23 @@ export default function TodoList() {
           .getPublicUrl(filePath);
           
         imageUrl = data.publicUrl;
+        setProgressPercentage(60); // 上传完成
       }
       
+      setProgressMessage('正在智能分析生成待办事项...');
+      if (!selectedFile) setProgressPercentage(40); // 如果没有图片，直接跳到 AI 分析阶段
+
+      // 模拟一点 AI 思考的进度条动画（因为 fetch 是 blocking 的，没法获得真实进度）
+      const interval = setInterval(() => {
+        setProgressPercentage((prev) => {
+          if (prev >= 90) {
+            clearInterval(interval);
+            return prev;
+          }
+          return prev + 5;
+        });
+      }, 500);
+
       // 调用后端 API 解析待办事项
       const response = await fetch('/api/generate-todos', {
         method: 'POST',
@@ -189,9 +226,13 @@ export default function TodoList() {
         body: JSON.stringify({
           text: newTodo,
           userId: userId,
-          imageUrl: imageUrl,
+          imageUrl: imageUrl, // 用于保存到数据库
+          base64Image: base64Image, // 用于 AI 分析
         }),
       });
+
+      clearInterval(interval);
+      setProgressPercentage(100); // 完成
 
       const result = await response.json();
 
@@ -211,7 +252,12 @@ export default function TodoList() {
       console.error('Error adding todo:', error);
       alert('添加任务失败: ' + error.message);
     } finally {
-      setIsSubmitting(false);
+      // 延迟关闭，让用户看到 100%
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setProgressMessage('');
+        setProgressPercentage(0);
+      }, 500);
     }
   };
 
@@ -266,6 +312,28 @@ export default function TodoList() {
           : 'bg-gradient-to-br from-blue-50 via-cyan-50 to-blue-100'
       }`}
     >
+      {/* 进度条弹窗 */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`p-8 rounded-3xl shadow-2xl ${isDark ? 'bg-slate-800 text-white' : 'bg-white text-slate-900'} max-w-sm w-full mx-4 flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-300`}>
+            <div className="relative w-16 h-16">
+              <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isDark ? 'border-cyan-400' : 'border-blue-600'}`}></div>
+              <Sparkles className={`absolute inset-0 m-auto w-8 h-8 ${isDark ? 'text-cyan-400' : 'text-blue-600'} animate-pulse`} />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-bold">AI 正在思考中</h3>
+              <p className={`text-sm ${isDark ? 'text-white/60' : 'text-slate-500'}`}>{progressMessage}</p>
+            </div>
+            <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
+              <div 
+                className={`h-full transition-all duration-300 ease-out ${isDark ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : 'bg-gradient-to-r from-blue-600 to-cyan-600'}`}
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-20 left-20 w-72 h-72 ${isDark ? 'bg-blue-500' : 'bg-blue-300'} rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse`}></div>
         <div className={`absolute top-40 right-20 w-72 h-72 ${isDark ? 'bg-cyan-500' : 'bg-cyan-300'} rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-1000`}></div>
