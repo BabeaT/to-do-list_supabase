@@ -418,22 +418,42 @@ export default function TodoList() {
                 : `已完成 ${completedCount} / ${totalCount}`}
             </p>
 
-            <form onSubmit={addTodo} className="mb-8">
-              <div className="flex flex-col gap-3">
-                <div className="flex gap-3 items-start">
-                  <Textarea
-                    placeholder="添加新任务... (支持自然语言，例如：明天早上买牛奶，下午去健身)"
-                    value={newTodo}
-                    onChange={(e) => setNewTodo(e.target.value)}
-                    rows={3}
-                    className={`flex-1 text-lg ${
-                      isDark
-                        ? 'bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:bg-white/15 focus:border-cyan-400'
-                        : 'bg-white/80 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-500'
-                    } backdrop-blur-xl rounded-2xl transition-all duration-300 resize-none`}
-                  />
-                  
-                  <div className="flex flex-col gap-2">
+            <form onSubmit={addTodo} className="mb-8 group">
+              <div
+                className={`
+                  relative flex flex-col gap-2 p-4 rounded-3xl border transition-all duration-300
+                  ${isDark
+                    ? 'bg-white/10 border-white/20 focus-within:bg-white/15 focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400/50'
+                    : 'bg-white/80 border-slate-200 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/50 shadow-sm hover:shadow-md focus-within:shadow-lg'
+                  }
+                  backdrop-blur-xl
+                `}
+              >
+                <Textarea
+                  placeholder="添加新任务... (支持自然语言，例如：明天早上买牛奶，下午去健身)"
+                  value={newTodo}
+                  onChange={(e) => setNewTodo(e.target.value)}
+                  rows={3}
+                  className={`w-full bg-transparent border-0 p-0 text-lg resize-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-slate-400 min-h-[80px] ${
+                    isDark ? 'text-white placeholder:text-white/30' : 'text-slate-800 placeholder:text-slate-400'
+                  }`}
+                />
+
+                {previewUrl && (
+                  <div className="relative inline-block self-start mt-2 animate-in fade-in zoom-in duration-300">
+                    <img src={previewUrl} alt="Preview" className="h-24 w-auto rounded-xl border border-white/10 object-cover shadow-sm" />
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      className="absolute -top-2 -right-2 bg-black/50 text-white rounded-full p-1.5 hover:bg-red-500 transition-colors backdrop-blur-sm"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                <div className={`flex justify-between items-center pt-2 mt-2 border-t ${isDark ? 'border-white/10' : 'border-slate-200/60'}`}>
+                  <div className="flex gap-2">
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -441,45 +461,45 @@ export default function TodoList() {
                       accept="image/*"
                       className="hidden"
                     />
-                    
                     <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => fileInputRef.current?.click()}
-                      className={`h-14 w-14 p-0 ${
-                        isDark
-                          ? 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
-                          : 'bg-white/80 text-slate-700 hover:bg-white border border-slate-200'
-                      } rounded-2xl transition-all duration-300`}
+                      className={`
+                        h-9 w-9 rounded-full transition-all duration-300
+                        ${isDark 
+                          ? 'text-white/60 hover:text-white hover:bg-white/10' 
+                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                        }
+                      `}
+                      title="上传图片"
                     >
-                      <ImageIcon className="w-6 h-6" />
+                      <ImageIcon className="w-5 h-5" />
                     </Button>
+                  </div>
 
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className={`h-14 w-14 p-0 ${
-                        isDark
-                          ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
-                          : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700'
-                      } text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105`}
-                    >
-                      {isSubmitting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-6 h-6" />}
-                    </Button>
-                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || (!newTodo.trim() && !previewUrl)}
+                    className={`
+                      rounded-full px-6 h-9 transition-all duration-300 font-medium text-sm
+                      ${isDark
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white shadow-lg shadow-cyan-500/20'
+                        : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-500/20'
+                      }
+                      disabled:opacity-50 disabled:shadow-none transform active:scale-95
+                    `}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        添加 <Plus className="w-4 h-4" />
+                      </span>
+                    )}
+                  </Button>
                 </div>
-                
-                {previewUrl && (
-                  <div className="relative inline-block self-start">
-                    <img src={previewUrl} alt="Preview" className="h-20 w-auto rounded-lg border border-white/20" />
-                    <button
-                      type="button"
-                      onClick={clearFile}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
               </div>
             </form>
 
